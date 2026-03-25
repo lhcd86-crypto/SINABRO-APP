@@ -1419,7 +1419,7 @@ tr:hover td{background:var(--bg)}
 // ★ 여기에 Supabase 정보를 입력하세요 ★
 // ══════════════════════════════════════════════════
 const SUPABASE_URL  = 'https://ltfjjwktqefchlshblve.supabase.co'
-const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx0Zmpqd2t0cWVmY2hsc2hibHZlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzOTU1NjEsImV4cCI6MjA4OTk3MTU2MX0.z45lBB8DVolT8CEmcSwuSwz7m_Bb4rMM75PtyivIbZs'  // Supabase > Settings > API > anon public key
+const SUPABASE_KEY  = '여기에_ANON_KEY_입력'  // Supabase > Settings > API > anon public key
 // ══════════════════════════════════════════════════
 
 const { createClient } = supabase
@@ -3882,7 +3882,7 @@ async function loadStaff(){
     </tr>`).join('') || '<tr><td colspan="6" class="empty">등록된 직원이 없습니다</td></tr>'
 }
 
-// 직원 초대 (Supabase Admin API 사용)
+// 직원 등록 — Supabase Edge Function 호출
 async function inviteStaff(){
   const name  = document.getElementById('st-name').value.trim()
   const email = document.getElementById('st-email').value.trim()
@@ -3894,57 +3894,48 @@ async function inviteStaff(){
     result.innerHTML = '<div style="color:var(--red);font-size:12px">이름과 이메일을 입력하세요</div>'
     return
   }
-
   result.innerHTML = '<div style="color:var(--ink3);font-size:12px">처리 중...</div>'
 
-  // 1. Supabase Auth에 사용자 생성 (관리자 초대)
-  const {data:authData, error:authErr} = await sb.auth.admin.inviteUserByEmail(email, {
-    data: { name, role }
-  })
+  try {
+    // Edge Function 호출 (서비스 롤로 실행)
+    const {data, error} = await sb.functions.invoke('create-staff', {
+      body: {name, email, role, phone}
+    })
 
-  if(authErr){
-    // admin API 사용 불가 시 일반 signUp으로 대체
-    const tempPw = Math.random().toString(36).slice(2,10) + 'Aa1!'
-    const {data:signData, error:signErr} = await sb.auth.admin.createUser({
-      email, password: tempPw,
-      email_confirm: true,
-      user_metadata: {name, role}
-    })
-    if(signErr){
-      result.innerHTML = `<div style="color:var(--red);font-size:12px">
-        ⚠️ Admin API 제한: Supabase → Authentication → Users → Add user에서 직접 등록 후<br>
-        아래 SQL을 실행하세요:<br>
-        <code style="background:var(--bg);padding:4px 8px;border-radius:4px;display:block;margin-top:6px;font-size:11px">
-          insert into users (id, name, role, email, phone) values ('UUID', '${name}', '${role}', '${email}', '${phone}');
-        </code>
-      </div>`
-      return
-    }
-    // users 테이블에 프로필 저장
-    await sb.from('users').insert({
-      id: signData.user.id, name, role, email, phone, is_active: true
-    })
-    result.innerHTML = `<div style="color:var(--green);font-size:12px">
-      ✓ 계정 생성됨 (임시 비밀번호: <strong>${tempPw}</strong>)<br>
-      직원에게 전달 후 비밀번호 변경을 요청하세요.
+    if(error) throw error
+
+    result.innerHTML = `<div style="padding:10px 12px;background:var(--green-lt);border-radius:6px;border-left:3px solid var(--green)">
+      <div style="font-size:13px;font-weight:700;color:var(--green);margin-bottom:4px">✓ 계정 생성 완료</div>
+      <div style="font-size:12px;color:var(--ink2)">이름: <strong>${name}</strong></div>
+      <div style="font-size:12px;color:var(--ink2)">이메일: ${email}</div>
+      <div style="font-size:12px;color:var(--ink2)">임시 비밀번호: <strong style="font-family:monospace;background:var(--bg);padding:2px 6px;border-radius:4px">${data.tempPassword}</strong></div>
+      <div style="font-size:11px;color:var(--ink3);margin-top:6px">직원에게 임시 비밀번호를 전달하고 변경을 요청하세요.</div>
     </div>`
     ;['st-name','st-email','st-phone'].forEach(id=>document.getElementById(id).value='')
     loadStaff()
-    return
-  }
 
-  // Auth 성공 시 users 테이블에 프로필 저장
-  if(authData?.user){
-    await sb.from('users').insert({
-      id: authData.user.id, name, role, email, phone, is_active: true
-    })
+  } catch(err) {
+    // Edge Function 미배포 시 안내
+    const tempPw = Math.random().toString(36).slice(2,8).toUpperCase() + Math.random().toString(36).slice(2,4) + '1!'
+    result.innerHTML = `<div style="padding:10px 12px;background:var(--amber-lt);border-radius:6px;border-left:3px solid var(--amber)">
+      <div style="font-size:12px;font-weight:700;color:var(--amber);margin-bottom:8px">⚠️ Edge Function 미배포 — 아래 방법으로 직접 등록하세요</div>
+      <div style="font-size:12px;color:var(--ink2);line-height:1.8">
+        <strong>① Supabase → Authentication → Users → Add user</strong><br>
+        Email: <code style="background:var(--bg);padding:1px 5px;border-radius:3px">${email}</code><br>
+        Password: <code style="background:var(--bg);padding:1px 5px;border-radius:3px">${tempPw}</code>
+        &nbsp;<button onclick="navigator.clipboard.writeText('${tempPw}');toast('복사됨','ok')" style="font-size:10px;padding:2px 6px;border:1px solid var(--line);border-radius:3px;cursor:pointer;background:var(--bg)">복사</button><br>
+        <span style="font-size:10px;color:var(--ink3)">Auto Confirm User 체크 → Create user</span>
+      </div>
+      <div style="font-size:12px;color:var(--ink2);margin-top:8px;line-height:1.8">
+        <strong>② 생성된 UUID 복사 후 SQL Editor에서 실행:</strong><br>
+        <code style="background:var(--bg);padding:4px 8px;border-radius:4px;display:block;margin-top:4px;font-size:10px;line-height:1.6;word-break:break-all">
+insert into users (id, name, role, email, phone, is_active)<br>
+values ('UUID붙여넣기', '${name}', '${role}', '${email}', '${phone}', true);
+        </code>
+        <button onclick="navigator.clipboard.writeText(\`insert into users (id, name, role, email, phone, is_active) values ('UUID붙여넣기', '${name}', '${role}', '${email}', '${phone}', true);\`);toast('SQL 복사됨','ok')" style="margin-top:4px;font-size:10px;padding:3px 8px;border:1px solid var(--line);border-radius:3px;cursor:pointer;background:var(--bg)">SQL 복사</button>
+      </div>
+    </div>`
   }
-  result.innerHTML = `<div style="color:var(--green);font-size:12px">
-    ✓ 초대 이메일을 발송했습니다.<br>
-    직원이 이메일을 확인하고 비밀번호를 설정하면 로그인 가능합니다.
-  </div>`
-  ;['st-name','st-email','st-phone'].forEach(id=>document.getElementById(id).value='')
-  loadStaff()
 }
 
 // 역할·정보 수정 모달
