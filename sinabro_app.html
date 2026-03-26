@@ -1419,7 +1419,7 @@ tr:hover td{background:var(--bg)}
 // ★ 여기에 Supabase 정보를 입력하세요 ★
 // ══════════════════════════════════════════════════
 const SUPABASE_URL  = 'https://ltfjjwktqefchlshblve.supabase.co'
-const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx0Zmpqd2t0cWVmY2hsc2hibHZlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzOTU1NjEsImV4cCI6MjA4OTk3MTU2MX0.z45lBB8DVolT8CEmcSwuSwz7m_Bb4rMM75PtyivIbZs'
+const SUPABASE_KEY  = ''
 // ══════════════════════════════════════════════════
 
 const { createClient } = supabase
@@ -1674,7 +1674,8 @@ async function initApp(user){
   CU=profile
 
   // 현장 목록 로드
-  const {data:projs}=await sb.from('projects').select('*').eq('status','active').order('code')
+  const {data:projs, error:projErr}=await sb.from('projects').select('*').eq('status','active').order('code')
+  if(projErr) console.warn('Projects load error:', projErr)
   PROJECTS=projs||[]
   CUP=PROJECTS[0]?.id||null
 
@@ -2149,17 +2150,20 @@ async function loadDashboard(){
   if(schedCard && CU.role === 'director_m') schedCard.style.display = 'none'
 
   // 전 현장 데이터 한 번에 로드 (project_id 무관)
-  const [r1,r2,r3,r4,r5,r6]=await Promise.all([
-    sb.from('daily_reports').select('*,projects(id,code,name,contract_amount,status,end_date)').order('report_date',{ascending:false}).limit(1000),
-    sb.from('costs').select('*,projects(id,code)').order('cost_date',{ascending:false}),
-    sb.from('advances').select('*,projects(id,code)').order('request_date',{ascending:false}),
-    sb.from('billings').select('*,projects(id,code)').order('billing_date',{ascending:false}),
-    sb.from('schedules').select('id,project_id,work_type,task_name,plan_start,plan_end,approved,projects(code)').eq('approved',false),
-    sb.from('prepayment_balance').select('project_id,total_prepayment,balance'),
-  ])
-  const reports=r1.data||[], costs=r2.data||[], advances=r3.data||[], billings=r4.data||[], pendingScheds=r5.data||[]
-  const prepayments=(r6.data||[])
-  const prepayBalance = prepayments.reduce((s,p)=>s+(p.balance||0),0)
+  let reports=[], costs=[], advances=[], billings=[], pendingScheds=[], prepayBalance=0
+  try {
+    const [r1,r2,r3,r4,r5,r6]=await Promise.all([
+      sb.from('daily_reports').select('*,projects(id,code,name,contract_amount,status,end_date)').order('report_date',{ascending:false}).limit(1000),
+      sb.from('costs').select('*,projects(id,code)').order('cost_date',{ascending:false}),
+      sb.from('advances').select('*,projects(id,code)').order('request_date',{ascending:false}),
+      sb.from('billings').select('*,projects(id,code)').order('billing_date',{ascending:false}),
+      sb.from('schedules').select('id,project_id,work_type,task_name,plan_start,plan_end,approved,projects(code)').eq('approved',false),
+      sb.from('prepayment_balance').select('project_id,total_prepayment,balance'),
+    ])
+    reports=r1.data||[]; costs=r2.data||[]; advances=r3.data||[]
+    billings=r4.data||[]; pendingScheds=r5.data||[]
+    prepayBalance=(r6.data||[]).reduce((s,p)=>s+(p.balance||0),0)
+  } catch(e){ console.warn('Dashboard load error:', e) }
 
   // ── 전체 합계 KPI ─────────────────────────────────
   const totalContract = PROJECTS.reduce((s,p)=>s+(p.contract_amount||0),0)
