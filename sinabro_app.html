@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Sinabro Vina — 현장관리</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
 /* ── RESET & BASE ── */
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -1683,16 +1683,20 @@ async function initApp(user){
     }
   }
   CU=profile
+  console.log('PROFILE OK:', profile.name, profile.role)
 
   // 현장 목록 로드
   const {data:projs, error:projErr}=await sb.from('projects').select('*').eq('status','active').order('code')
   if(projErr) console.warn('Projects load error:', projErr)
   PROJECTS=projs||[]
   CUP=PROJECTS[0]?.id||null
+  console.log('PROJECTS OK:', PROJECTS.length)
 
   // UI 세팅
+  console.log('UI SWITCH START')
   document.getElementById('login-screen').style.display='none'
   document.getElementById('app').style.display='flex'
+  console.log('UI SWITCH DONE')
 
   const chip=document.getElementById('role-chip')
   chip.textContent=ROLE_LABELS[CU.role]||CU.role
